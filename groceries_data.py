@@ -25,7 +25,7 @@ def find_store_links(nimble, store_name, store_address):
     ]
 
 
-def find_grocery_stores(start_address, api_key):
+def find_grocery_stores(start_address, api_key, radius_miles=5):
     nimble = Nimble(api_key=api_key)
 
     # GeoPy is a separate library for coordinates and distance.
@@ -129,8 +129,7 @@ def find_grocery_stores(start_address, api_key):
 
         distance_miles = geodesic(origin, destination).miles
 
-        # Keep the strict 5-mile filter.
-        if distance_miles <= 5:
+        if distance_miles <= radius_miles:
 
             nearby_stores.append({
                 "name": store_name,

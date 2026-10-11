@@ -18,17 +18,23 @@ def groceries():
     if not isinstance(address, str) or not address.strip():
         return jsonify({"error": "An address is required."}), 400
 
+    radius = data.get("radius", 5)
+
+    if isinstance(radius, bool) or radius not in (1, 3, 5, 10):
+        return jsonify({"error": "Radius must be 1, 3, 5, or 10 miles."}), 400
+
     api_key = os.environ.get("NIMBLE_API_KEY")
 
     if not api_key:
         return jsonify({"error": "Backend API key is missing."}), 500
 
     try:
-        stores = find_grocery_stores(address.strip(), api_key)
+        stores = find_grocery_stores(address.strip(), api_key, radius)
 
         return jsonify({
             "stores": stores,
             "count": len(stores),
+            "radius_miles": radius,
         })
 
     except ValueError as error:

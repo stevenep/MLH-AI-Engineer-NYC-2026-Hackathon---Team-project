@@ -222,6 +222,7 @@ __marimo__/
 # JavaScript dependencies and build output
 node_modules/
 frontend/dist/
+frontend/.vite/
 
 #AI AGENT
 node_modules/

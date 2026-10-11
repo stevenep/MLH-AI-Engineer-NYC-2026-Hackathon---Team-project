@@ -13,6 +13,7 @@ import SavingsRoundedIcon from "@mui/icons-material/SavingsRounded";
 import ShoppingBasketRoundedIcon from "@mui/icons-material/ShoppingBasketRounded";
 import StorefrontRoundedIcon from "@mui/icons-material/StorefrontRounded";
 import { createMockComparisons, formatPrice, getCheapestCompleteBasket, initialGroceries, } from "./mockData";
+import StoreResults from "./StoreResults";
 const green = {
     deep: "#263b2f",
     hover: "#385643",
@@ -189,13 +190,13 @@ function HomeDashboard({ onStartShopping }) {
             },
             {
                 icon: <StorefrontRoundedIcon />,
-                title: "Compare nearby stores",
-                body: "See item-by-item prices and which shops have your whole list.",
+                title: "Find nearby stores",
+                body: "See grocery stores, addresses, websites, and driving directions.",
             },
             {
                 icon: <SavingsRoundedIcon />,
-                title: "Keep more in your pocket",
-                body: "Spot the lowest complete basket and see your possible savings.",
+                title: "Plan your grocery trip",
+                body: "Choose a search radius and find stores close to your address.",
             },
         ].map((feature) => (<Card key={feature.title} elevation={0} sx={{
                 border: `1px solid ${green.border}`,
@@ -238,22 +239,19 @@ function GroceryListPage() {
     const [newName, setNewName] = useState("");
     const [newQuantity, setNewQuantity] = useState(1);
     const [newUnit, setNewUnit] = useState("count");
-    const [zipCode, setZipCode] = useState("10001");
+    const [address, setAddress] = useState("393 7th Avenue, New York, NY 10001");
     const [radius, setRadius] = useState(3);
-    const [budget, setBudget] = useState("");
     const [comparisons, setComparisons] = useState(null);
+    const [stores, setStores] = useState([]);
+    const [errorMessage, setErrorMessage] = useState("");
     const [status, setStatus] = useState("idle");
-    const comparisonTimeout = useRef(undefined);
-    useEffect(() => () => {
-        if (comparisonTimeout.current !== undefined) {
-            window.clearTimeout(comparisonTimeout.current);
-        }
-    }, []);
+    const storeRequest = useRef(null);
+    useEffect(() => () => storeRequest.current?.abort(), []);
+    function cancelStoreRequest() {
+        storeRequest.current?.abort();
+        storeRequest.current = null;
+    }
     function updateGroceries(nextGroceries) {
-        if (comparisonTimeout.current !== undefined) {
-            window.clearTimeout(comparisonTimeout.current);
-            comparisonTimeout.current = undefined;
-        }
         setGroceries(nextGroceries);
         setComparisons(null);
         setStatus("idle");
@@ -281,30 +279,67 @@ function GroceryListPage() {
         updateGroceries(groceries.map((item) => (item.id === id ? { ...item, ...updates } : item)));
     }
     function handleRadiusChange(event) {
-        if (comparisonTimeout.current !== undefined) {
-            window.clearTimeout(comparisonTimeout.current);
-            comparisonTimeout.current = undefined;
-        }
+        cancelStoreRequest();
         setRadius(Number(event.target.value));
         setComparisons(null);
+        setStores([]);
+        setErrorMessage("");
         setStatus("idle");
     }
-    function comparePrices() {
-        if (groceries.length === 0 ||
-            groceries.some((item) => !item.name.trim() || item.quantity <= 0)) {
+    async function comparePrices() {
+        if (!address.trim()) {
             return;
         }
-        if (comparisonTimeout.current !== undefined) {
-            window.clearTimeout(comparisonTimeout.current);
-        }
+        cancelStoreRequest();
+        const controller = new AbortController();
+        storeRequest.current = controller;
         setComparisons(null);
+        setStores([]);
+        setErrorMessage("");
         setStatus("loading");
-        const grocerySnapshot = groceries.map((item) => ({ ...item }));
-        const radiusSnapshot = radius;
-        comparisonTimeout.current = window.setTimeout(() => {
-            setComparisons(createMockComparisons(grocerySnapshot, radiusSnapshot));
-            setStatus("success");
-        }, 550);
+        try {
+            const response = await fetch("/api/groceries", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ address: address.trim(), radius }),
+                signal: controller.signal,
+            });
+            let data;
+            try {
+                data = await response.json();
+            }
+            catch {
+                throw new Error("The backend returned an invalid response.");
+            }
+            if (!data || typeof data !== "object") {
+                throw new Error("The backend returned an unexpected response.");
+            }
+            if (!response.ok) {
+                throw new Error(data.error || `Backend request failed (${response.status}).`);
+            }
+            if (!Array.isArray(data.stores)) {
+                throw new Error("The backend response did not include a stores list.");
+            }
+            const validStores = data.stores.filter((store) => store &&
+                typeof store.name === "string" &&
+                typeof store.address === "string" &&
+                typeof store.distance === "number" &&
+                Number.isFinite(store.distance));
+            if (validStores.length !== data.stores.length) {
+                throw new Error("The backend returned store data in an unexpected format.");
+            }
+            setStores(validStores);
+            setStatus("loaded");
+        }
+        catch (error) {
+            if (error instanceof Error && error.name === "AbortError") {
+                return;
+            }
+            setErrorMessage(error instanceof Error
+                ? error.message
+                : "Could not load nearby grocery stores.");
+            setStatus("error");
+        }
     }
     const cheapest = comparisons
         ? getCheapestCompleteBasket(comparisons)
@@ -315,8 +350,8 @@ function GroceryListPage() {
     const savings = cheapest && mostExpensiveComplete
         ? Number((mostExpensiveComplete.total - cheapest.total).toFixed(2))
         : 0;
-    const canCompare = groceries.length > 0 &&
-        groceries.every((item) => item.name.trim() && item.quantity > 0);
+    const filteredStores = stores.filter((store) => Number(store.distance) <= radius);
+    const canCompare = address.trim().length > 0;
     return (<Stack spacing={3}>
       <Box>
         <Chip icon={<AutoAwesomeRoundedIcon />} label="YOUR AI GROCERY ASSISTANT" size="small" sx={{
@@ -338,7 +373,7 @@ function GroceryListPage() {
           Let&apos;s find your best basket.
         </Typography>
         <Typography sx={{ mt: 1, color: "#69766e", fontSize: 15 }}>
-          Add your groceries and compare the demo prices at stores near you.
+          Enter your address to find nearby grocery stores and their distance.
         </Typography>
       </Box>
 
@@ -356,7 +391,8 @@ function GroceryListPage() {
                 Your grocery list
               </Typography>
               <Typography sx={{ mt: 0.4, color: "#829087", fontSize: 12 }}>
-                Add an item, then adjust its quantity and unit.
+                Your list is editable. Store search uses the address below; this
+                backend does not compare item prices yet.
               </Typography>
             </Box>
             <Chip label={`${groceries.length} ${groceries.length === 1 ? "item" : "items"}`} size="small" sx={{
@@ -474,10 +510,16 @@ function GroceryListPage() {
 
           <Box sx={{
             display: "grid",
-            gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
+            gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)" },
             gap: 1.5,
         }}>
-            <TextField value={zipCode} onChange={(event) => setZipCode(event.target.value.replace(/\D/g, "").slice(0, 5))} label="ZIP code" size="small" inputProps={{ inputMode: "numeric", maxLength: 5 }} InputProps={{
+            <TextField value={address} onChange={(event) => {
+            cancelStoreRequest();
+            setAddress(event.target.value);
+            setStores([]);
+            setStatus("idle");
+            setErrorMessage("");
+        }} label="Starting address" size="small" fullWidth placeholder="Street, city, state, ZIP" inputProps={{ autoComplete: "street-address" }} InputProps={{
             startAdornment: (<InputAdornment position="start">
                     <LocationOnOutlinedIcon sx={{ color: "#839188", fontSize: 18 }}/>
                   </InputAdornment>),
@@ -491,12 +533,9 @@ function GroceryListPage() {
                   </MenuItem>))}
               </Select>
             </FormControl>
-            <TextField value={budget} onChange={(event) => setBudget(event.target.value.replace(/[^\d.]/g, ""))} label="Grocery budget (optional)" size="small" type="number" inputProps={{ min: 0, step: 0.01 }} InputProps={{
-            startAdornment: (<InputAdornment position="start">$</InputAdornment>),
-        }}/>
           </Box>
 
-          <Button fullWidth variant="contained" size="large" startIcon={status === "loading" ? (<CircularProgress size={17} color="inherit"/>) : (<SavingsRoundedIcon />)} onClick={comparePrices} disabled={!canCompare || status === "loading"} sx={{
+          <Button fullWidth variant="contained" size="large" startIcon={status === "loading" ? (<CircularProgress size={17} color="inherit"/>) : (<StorefrontRoundedIcon />)} onClick={comparePrices} disabled={!canCompare || status === "loading"} sx={{
             minHeight: 52,
             mt: 2.2,
             borderRadius: "9px",
@@ -510,11 +549,11 @@ function GroceryListPage() {
             },
         }}>
             {status === "loading"
-            ? "Comparing demo prices…"
-            : "Find Cheapest Groceries"}
+            ? "Finding nearby stores…"
+            : "Find Nearby Grocery Stores"}
           </Button>
           <Typography sx={{ mt: 1.1, color: "#8b968f", fontSize: 11, textAlign: "center" }}>
-            Demo comparison only · Sample prices are not live store prices
+            Store results come from the connected backend · Search radius filters returned stores
           </Typography>
         </CardContent>
       </Card>
@@ -532,9 +571,26 @@ function GroceryListPage() {
             }}>
           <CircularProgress size={22} sx={{ color: green.leaf }}/>
           <Typography sx={{ fontSize: 14 }}>
-            Comparing your basket at nearby demo stores…
+            Searching for grocery stores near your address…
           </Typography>
         </Paper>)}
+
+      {status === "error" && (
+        <Alert
+          severity="error"
+          sx={{
+            border: `1px solid ${green.border}`,
+            borderRadius: "12px",
+            backgroundColor: green.paper,
+          }}
+        >
+          {errorMessage}
+        </Alert>
+      )}
+
+      {status === "loaded" && (
+        <StoreResults stores={filteredStores} address={address} radius={radius} />
+      )}
 
       {status === "success" && comparisons && (<Stack spacing={2}>
           <Stack direction={{ xs: "column", sm: "row" }} alignItems={{ xs: "flex-start", sm: "flex-end" }} justifyContent="space-between" spacing={1}>
