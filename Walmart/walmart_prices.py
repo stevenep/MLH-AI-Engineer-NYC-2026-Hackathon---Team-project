@@ -6,36 +6,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from nimble_python import Nimble
 
-
-# ==========================================
-# 1. PROJECT PATHS & API KEY
-# ==========================================
-
-# Location of the Walmart folder
 BASE_DIR = Path(__file__).resolve().parent
-
-# Location of the main GitHub repository
 PROJECT_ROOT = BASE_DIR.parent
-
-# Existing .env file inside AI-Agent
 ENV_PATH = PROJECT_ROOT / "AI-Agent" / ".env"
 
-load_dotenv(ENV_PATH, override=True)
-
-api_key = os.getenv("NIMBLE_API_KEY")
-
-if not api_key:
-    raise RuntimeError(
-        "NIMBLE_API_KEY is missing from AI-Agent/.env"
-    )
-
-# Create Nimble client
-nimble = Nimble(api_key=api_key)
-
-
-# ==========================================
-# 2. CONVERT NIMBLE RESPONSE TO DICTIONARY
-# ==========================================
 
 def to_dict(result):
     """Convert Nimble's response into a Python object."""
@@ -49,11 +23,7 @@ def to_dict(result):
     return result
 
 
-# ==========================================
-# 3. SEARCH WALMART FOR ONE PRODUCT
-# ==========================================
-
-def walmart_search(product, zipcode="10001"):
+def walmart_search(nimble, product, zipcode="10001"):
     """Search Walmart using Nimble's Walmart template."""
 
     response = nimble.extract.templates.run(
@@ -68,11 +38,7 @@ def walmart_search(product, zipcode="10001"):
     return to_dict(response)
 
 
-# ==========================================
-# 4. SEARCH A COMPLETE GROCERY LIST
-# ==========================================
-
-def search_grocery_list(items, zipcode="10001"):
+def search_grocery_list(nimble, items, zipcode="10001"):
     """Search Walmart for every grocery item."""
 
     results = {}
@@ -81,7 +47,7 @@ def search_grocery_list(items, zipcode="10001"):
         print(f"Searching Walmart for: {item}", flush=True)
 
         try:
-            results[item] = walmart_search(item, zipcode)
+            results[item] = walmart_search(nimble, item, zipcode)
 
         except Exception as error:
             results[item] = {
@@ -94,10 +60,6 @@ def search_grocery_list(items, zipcode="10001"):
         "results": results
     }
 
-
-# ==========================================
-# 5. EXTRACT USEFUL PRODUCT FIELDS
-# ==========================================
 
 def extract_products(response):
     """Extract relevant product data from Nimble's response."""
@@ -136,10 +98,6 @@ def extract_products(response):
     return cleaned
 
 
-# ==========================================
-# 6. SAVE JSON FILE
-# ==========================================
-
 def save_json(filename, data):
     """Save JSON inside the Walmart folder."""
 
@@ -151,20 +109,19 @@ def save_json(filename, data):
     print(f"Saved: {output_path}")
 
 
-# ==========================================
-# 7. RUN THE PROGRAM
-# ==========================================
-
 if __name__ == "__main__":
+    load_dotenv(ENV_PATH)
+    api_key = os.getenv("NIMBLE_API_KEY")
 
-    # Grocery items to search
+    if not api_key:
+        raise RuntimeError(
+            "NIMBLE_API_KEY is missing from AI-Agent/.env"
+        )
+
+    nimble = Nimble(api_key=api_key)
     groceries = ["banana"]
-
-    # User ZIP code
     zipcode = "10001"
-
-    # Retrieve Walmart data from Nimble
-    output = search_grocery_list(groceries, zipcode)
+    output = search_grocery_list(nimble, groceries, zipcode)
 
     # Save complete API response
     save_json("walmart_results.json", output)

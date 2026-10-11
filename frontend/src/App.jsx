@@ -13,6 +13,7 @@ import SavingsRoundedIcon from "@mui/icons-material/SavingsRounded";
 import ShoppingBasketRoundedIcon from "@mui/icons-material/ShoppingBasketRounded";
 import StorefrontRoundedIcon from "@mui/icons-material/StorefrontRounded";
 import { createMockComparisons, formatPrice, getCheapestCompleteBasket, initialGroceries, } from "./mockData";
+import RetailerPriceResults from "./RetailerPriceResults";
 import StoreResults from "./StoreResults";
 const green = {
     deep: "#263b2f",
@@ -245,16 +246,44 @@ function GroceryListPage() {
     const [stores, setStores] = useState([]);
     const [errorMessage, setErrorMessage] = useState("");
     const [status, setStatus] = useState("idle");
+    const [aldiResults, setAldiResults] = useState([]);
+    const [aldiError, setAldiError] = useState("");
+    const [aldiStatus, setAldiStatus] = useState("idle");
+    const [walmartResults, setWalmartResults] = useState([]);
+    const [walmartError, setWalmartError] = useState("");
+    const [walmartStatus, setWalmartStatus] = useState("idle");
     const storeRequest = useRef(null);
-    useEffect(() => () => storeRequest.current?.abort(), []);
+    const aldiRequest = useRef(null);
+    const walmartRequest = useRef(null);
+    useEffect(() => () => {
+        storeRequest.current?.abort();
+        aldiRequest.current?.abort();
+        walmartRequest.current?.abort();
+    }, []);
     function cancelStoreRequest() {
         storeRequest.current?.abort();
         storeRequest.current = null;
     }
+    function cancelAldiRequest() {
+        aldiRequest.current?.abort();
+        aldiRequest.current = null;
+    }
+    function cancelWalmartRequest() {
+        walmartRequest.current?.abort();
+        walmartRequest.current = null;
+    }
     function updateGroceries(nextGroceries) {
+        cancelAldiRequest();
+        cancelWalmartRequest();
         setGroceries(nextGroceries);
         setComparisons(null);
         setStatus("idle");
+        setAldiResults([]);
+        setAldiError("");
+        setAldiStatus("idle");
+        setWalmartResults([]);
+        setWalmartError("");
+        setWalmartStatus("idle");
     }
     function addGrocery(event) {
         event.preventDefault();
@@ -341,6 +370,136 @@ function GroceryListPage() {
             setStatus("error");
         }
     }
+    async function findAldiPrices() {
+        const items = groceries.map((item) => item.name.trim());
+        if (
+            items.length < 1 ||
+            items.length > 5 ||
+            items.some((item) => !item)
+        ) {
+            return;
+        }
+        cancelAldiRequest();
+        const controller = new AbortController();
+        aldiRequest.current = controller;
+        setAldiResults([]);
+        setAldiError("");
+        setAldiStatus("loading");
+        try {
+            const response = await fetch("/api/aldi-prices", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ items }),
+                signal: controller.signal,
+            });
+            let data;
+            try {
+                data = await response.json();
+            }
+            catch {
+                throw new Error("The backend returned an invalid response.");
+            }
+            if (!data || typeof data !== "object") {
+                throw new Error("The backend returned an unexpected response.");
+            }
+            if (!response.ok) {
+                throw new Error(data.error || `Backend request failed (${response.status}).`);
+            }
+            if (
+                !Array.isArray(data.aldi_items) ||
+                data.aldi_items.some((result) =>
+                    !result ||
+                    typeof result.requested_item !== "string" ||
+                    !Array.isArray(result.products) ||
+                    result.products.some((product) =>
+                        !product || typeof product.product_name !== "string"
+                    )
+                )
+            ) {
+                throw new Error("The backend returned ALDI results in an unexpected format.");
+            }
+            setAldiResults(data.aldi_items);
+            setAldiStatus("loaded");
+        }
+        catch (error) {
+            if (error instanceof Error && error.name === "AbortError") {
+                return;
+            }
+            setAldiError(error instanceof Error
+                ? error.message
+                : "Could not load ALDI product prices.");
+            setAldiStatus("error");
+        }
+    }
+    async function findWalmartPrices() {
+        const items = groceries.map((item) => item.name.trim());
+        if (
+            items.length < 1 ||
+            items.length > 5 ||
+            items.some((item) => !item)
+        ) {
+            return;
+        }
+        cancelWalmartRequest();
+        const controller = new AbortController();
+        walmartRequest.current = controller;
+        setWalmartResults([]);
+        setWalmartError("");
+        setWalmartStatus("loading");
+        try {
+            const response = await fetch("/api/walmart-prices", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ items }),
+                signal: controller.signal,
+            });
+            let data;
+            try {
+                data = await response.json();
+            }
+            catch {
+                throw new Error("The backend returned an invalid response.");
+            }
+            if (!data || typeof data !== "object") {
+                throw new Error("The backend returned an unexpected response.");
+            }
+            if (!response.ok) {
+                throw new Error(data.error || `Backend request failed (${response.status}).`);
+            }
+            if (
+                !data.results ||
+                typeof data.results !== "object" ||
+                Array.isArray(data.results) ||
+                Object.entries(data.results).some(([item, result]) =>
+                    !item ||
+                    !result ||
+                    !Array.isArray(result.products) ||
+                    result.products.some((product) =>
+                        !product || typeof product.product_name !== "string"
+                    )
+                )
+            ) {
+                throw new Error("The backend returned Walmart results in an unexpected format.");
+            }
+            setWalmartResults(
+                Object.entries(data.results).map(([requested_item, result]) => ({
+                    requested_item,
+                    products: result.products,
+                    error: result.error,
+                })),
+            );
+            setWalmartStatus("loaded");
+        }
+        catch (error) {
+            if (error instanceof Error && error.name === "AbortError") {
+                return;
+            }
+            setWalmartError(error instanceof Error
+                ? error.message
+                : "Could not load Walmart product prices.");
+            setWalmartStatus("error");
+        }
+    }
     const cheapest = comparisons
         ? getCheapestCompleteBasket(comparisons)
         : undefined;
@@ -373,7 +532,7 @@ function GroceryListPage() {
           Let&apos;s find your best basket.
         </Typography>
         <Typography sx={{ mt: 1, color: "#69766e", fontSize: 15 }}>
-          Enter your address to find nearby grocery stores and their distance.
+          Find nearby stores or search ALDI for products from your grocery list.
         </Typography>
       </Box>
 
@@ -391,8 +550,8 @@ function GroceryListPage() {
                 Your grocery list
               </Typography>
               <Typography sx={{ mt: 0.4, color: "#829087", fontSize: 12 }}>
-                Your list is editable. Store search uses the address below; this
-                backend does not compare item prices yet.
+                Your list is editable. Search ALDI separately for product matches
+                and prices.
               </Typography>
             </Box>
             <Chip label={`${groceries.length} ${groceries.length === 1 ? "item" : "items"}`} size="small" sx={{
@@ -552,6 +711,83 @@ function GroceryListPage() {
             ? "Finding nearby stores…"
             : "Find Nearby Grocery Stores"}
           </Button>
+        <Button
+          fullWidth
+          variant="outlined"
+          size="large"
+          startIcon={aldiStatus === "loading" ? (
+            <CircularProgress size={17} />
+          ) : (
+            <StorefrontRoundedIcon />
+          )}
+          onClick={findAldiPrices}
+          disabled={
+            groceries.length === 0 ||
+            groceries.length > 5 ||
+            groceries.some((item) => !item.name.trim()) ||
+            aldiStatus === "loading"
+          }
+          sx={{
+            minHeight: 50,
+            mt: 1.2,
+            borderColor: "#b9cbb9",
+            borderRadius: "9px",
+            color: green.deep,
+            fontSize: 14,
+            fontWeight: 700,
+            "&:hover": {
+              borderColor: green.leaf,
+              backgroundColor: "#f5f8f3",
+            },
+          }}
+        >
+          {aldiStatus === "loading"
+            ? "Searching ALDI products…"
+            : "Find Aldi Prices"}
+        </Button>
+        <Typography sx={{ mt: 0.8, color: "#8b968f", fontSize: 11, textAlign: "center" }}>
+          Sends item names to the backend; quantity and unit are not used in ALDI price lookup.
+        </Typography>
+        {groceries.length > 5 && (
+          <Alert severity="info" sx={{ mt: 1, borderRadius: "10px" }}>
+              ALDI and Walmart price searches support up to 5 items at a time.
+              Remove items from the list to continue.
+          </Alert>
+        )}
+          <Button
+            fullWidth
+            variant="outlined"
+            size="large"
+            startIcon={walmartStatus === "loading" ? (
+              <CircularProgress size={17} />
+            ) : (
+              <StorefrontRoundedIcon />
+            )}
+            onClick={findWalmartPrices}
+            disabled={
+              groceries.length === 0 ||
+              groceries.length > 5 ||
+              groceries.some((item) => !item.name.trim()) ||
+              walmartStatus === "loading"
+            }
+            sx={{
+              minHeight: 50,
+              mt: 1.2,
+              borderColor: "#b9cbb9",
+              borderRadius: "9px",
+              color: green.deep,
+              fontSize: 14,
+              fontWeight: 700,
+              "&:hover": {
+                borderColor: green.leaf,
+                backgroundColor: "#f5f8f3",
+              },
+            }}
+          >
+            {walmartStatus === "loading"
+              ? "Searching Walmart products…"
+              : "Find Walmart Prices"}
+          </Button>
           <Typography sx={{ mt: 1.1, color: "#8b968f", fontSize: 11, textAlign: "center" }}>
             Store results come from the connected backend · Search radius filters returned stores
           </Typography>
@@ -590,6 +826,84 @@ function GroceryListPage() {
 
       {status === "loaded" && (
         <StoreResults stores={filteredStores} address={address} radius={radius} />
+      )}
+
+      {aldiStatus === "loading" && (
+        <Paper
+          elevation={0}
+          sx={{
+            display: "flex",
+            minHeight: 120,
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 1.5,
+            border: `1px solid ${green.border}`,
+            borderRadius: "16px",
+            backgroundColor: green.paper,
+            color: green.muted,
+          }}
+        >
+          <CircularProgress size={22} sx={{ color: green.leaf }} />
+          <Typography sx={{ fontSize: 14 }}>
+            Searching ALDI products for your grocery list…
+          </Typography>
+        </Paper>
+      )}
+
+      {aldiStatus === "error" && (
+        <Alert
+          severity="error"
+          sx={{
+            border: `1px solid ${green.border}`,
+            borderRadius: "12px",
+            backgroundColor: green.paper,
+          }}
+        >
+          {aldiError}
+        </Alert>
+      )}
+
+      {aldiStatus === "loaded" && (
+        <RetailerPriceResults retailer="ALDI" results={aldiResults} />
+      )}
+
+      {walmartStatus === "loading" && (
+        <Paper
+          elevation={0}
+          sx={{
+            display: "flex",
+            minHeight: 120,
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 1.5,
+            border: `1px solid ${green.border}`,
+            borderRadius: "16px",
+            backgroundColor: green.paper,
+            color: green.muted,
+          }}
+        >
+          <CircularProgress size={22} sx={{ color: green.leaf }} />
+          <Typography sx={{ fontSize: 14 }}>
+            Searching Walmart products for your grocery list…
+          </Typography>
+        </Paper>
+      )}
+
+      {walmartStatus === "error" && (
+        <Alert
+          severity="error"
+          sx={{
+            border: `1px solid ${green.border}`,
+            borderRadius: "12px",
+            backgroundColor: green.paper,
+          }}
+        >
+          {walmartError}
+        </Alert>
+      )}
+
+      {walmartStatus === "loaded" && (
+        <RetailerPriceResults retailer="Walmart" results={walmartResults} />
       )}
 
       {status === "success" && comparisons && (<Stack spacing={2}>

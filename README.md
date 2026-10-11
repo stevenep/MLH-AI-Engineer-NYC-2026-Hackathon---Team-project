@@ -93,47 +93,25 @@ Frontend startup depends on the team's frontend implementation. When using a sep
 Keep Flask running and execute this in a second terminal:
 
 ```bash
-curl -sS -X POST http://127.0.0.1:5000/api/grocery-plan \
-  -H "Content-Type: application/json" \
-  -d '{"address":"393 7th Avenue, New York, NY 10001","items":["milk","eggs","bread"]}' \
-  | python3 -m json.tool
+cd frontend
+npm install
+npm run dev
 ```
 
-To test ALDI lookup independently:
+In a separate terminal from the repository root, start the Flask backend on
+port 5001. Activate your Python environment and load the Nimble API key before
+starting Flask:
 
 ```bash
-python check_aldi.py
+source .venv/bin/activate
+set -a
+source AI-Agent/.env
+set +a
+flask --app app run --host 127.0.0.1 --port 5001
 ```
 
-Enter `milk, eggs, bread` when prompted. Search and extraction involve multiple requests, so allow time for the results.
-
-
-## 🧪 Validation completed during development
-
-- A live Flask request returned HTTP `200` with 15 distance-sorted stores and all returned distances below 5 miles.
-- Direct ALDI and Walmart product-page extraction retrieved a displayed milk price and detected an out-of-stock label.
-- The interactive ALDI and Walmart item-search test was reported working after connecting discovery to extraction.
-
-These are manual prototype checks, not a guarantee of complete store coverage or successful extraction for every item. Live website results can change.
-
-## 🔍 Honest data, useful results
-
-- **Online prices:** ALDI and Walmart prices are from retrieved online pages; the current flow does not select or verify a local branch. Online and in-store prices may differ.
-- **Candidate products:** a broad query like “milk” can return different brands, types, and package sizes. Matching equivalent quantities is required before comparing totals.
-- **Availability:** an explicit out-of-stock label is preserved. Without a stock signal, availability is unknown.
-- **Search coverage:** the app returns up to 15 qualifying retrieved stores, not every store in the area or necessarily the 15 closest overall.
-- **Extraction gaps:** missing or ambiguous prices remain unavailable. Website changes can require parser updates.
-- **Latency:** geocoding, store-link discovery, and product extraction can make requests slow. Show a loading state in the frontend.
-
-## 🌱 What's next
-
-- Branch-specific pickup prices and availability.
-- Product-size and unit-price normalization.
-- Complete-basket comparisons across supported retailers.
-- Savings versus travel-distance recommendations.
-- Cached results and concurrent background price lookups.
-- Budget-friendly substitutions with clear product matching.
-
-## 🏁 Our goal
-
-**Turn scattered grocery information into a clear shopping decision—starting with nearby stores and traceable product prices.**
+Vite proxies frontend `/api` requests to `http://127.0.0.1:5001` during
+development. The AI page sends the address and selected radius (1, 3, 5, or 10
+miles) to Flask and shows each returned store's distance, address, and available
+website. Restart Flask after changing the backend. Run `npm run build` in
+`frontend/` to create production assets in `frontend/dist/`.
