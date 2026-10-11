@@ -5,7 +5,24 @@ from nimble_python import Nimble
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
 from geopy.distance import geodesic
-from urllib.parse import urlencode
+
+def find_store_links(nimble, store_name, store_address):
+    response = nimble.search(
+        query=(
+            f"{store_name} {store_address} official website groceries"
+        ),
+        search_depth="lite",
+        max_results=3,
+    )
+
+    return [
+        {
+            "title": result.title,
+            "url": result.url,
+            "description": result.description,
+        }
+        for result in response.results
+    ]
 
 
 def find_grocery_stores(start_address, api_key):
@@ -48,22 +65,20 @@ def find_grocery_stores(start_address, api_key):
             },
         )
     except Exception as error:
-        print(f"Nimble request failed: {type(error).__name__}")
-        print("Check your API key, account access, and connection.")
-        return
+        raise RuntimeError("Nimble request failed.") from error
 
     parsed = response.data.parsing if response.data else None
 
     if not isinstance(parsed, dict):
-        print("Nimble did not return the expected structured data.")
-        return
+        raise RuntimeError(
+            "Nimble did not return the expected structured data."
+        )
 
     entities = parsed.get("entities", {})
     stores = entities.get("SearchResult", [])
 
     if not stores:
-        print("No store records returned.")
-        return
+        return []
 
     nearby_stores = []
     seen_addresses = set()
@@ -76,6 +91,7 @@ def find_grocery_stores(start_address, api_key):
             skipped += 1
             continue
 
+        print("RAW STORE:", store)
         # These values now come from Nimble, not manual input.
         store_name = store.get("title")
         store_address = store.get("address")
@@ -115,23 +131,34 @@ def find_grocery_stores(start_address, api_key):
 
         # Keep the strict 5-mile filter.
         if distance_miles <= 5:
-            maps_url = (
-            "https://www.google.com/maps/search/?"
-            + urlencode({
-                "api": 1,
-                "query": f"{store_name}, {store_address}",
-            })
-        )
 
             nearby_stores.append({
                 "name": store_name,
                 "address": store_address,
                 "distance": distance_miles,
-                "source": maps_url,
             })
 
     # Sort the retrieved stores and return at most 15.
     nearby_stores.sort(key=lambda store: store["distance"])
     nearby_stores = nearby_stores[:15]
+
+    for store in nearby_stores:
+        try:
+            response = nimble.search(
+                query=(
+                    f"{store['name']} {store['address']} official website"
+                ),
+                search_depth="lite",
+                max_results=1,
+            )
+
+            store["website"] = (
+                response.results[0].url
+                if response.results
+                else None
+            )
+
+        except Exception:
+            store["website"] = None
 
     return nearby_stores
