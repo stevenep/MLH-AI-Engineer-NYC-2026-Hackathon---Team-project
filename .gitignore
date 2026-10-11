@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+#AI AGENT
+node_modules/
+.env
+.env.*
+!.env.example
