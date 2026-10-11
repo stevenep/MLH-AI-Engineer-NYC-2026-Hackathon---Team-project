@@ -1,0 +1,51 @@
+{
+  "store": "Walmart",
+  "zipcode": "10001",
+  "results": {
+    "banana": {
+      "best_match": {
+        "product_name": "Fresh Banana, Each",
+        "price": 0.2,
+        "availability": "In stock",
+        "out_of_stock": false,
+        "seller": "Walmart.com",
+        "store_location": "64133",
+        "url": "https://www.walmart.com/ip/Fresh-Banana-Each/44390948?classType=REGULAR&athbdg=L1200",
+        "image": "https://i5.walmartimages.com/seo/Fresh-Banana-Each_5939a6fa-a0d6-431c-88c6-b4f21608e4be.f7cd0cc487761d74c69b7731493c1581.jpeg",
+        "sponsored": false,
+        "product_id": "44390948",
+        "match_score": 75
+      },
+      "alternatives": [
+        {
+          "product_name": "Marketside Fresh Organic Bananas, Bunch",
+          "price": 1.74,
+          "availability": "In stock",
+          "out_of_stock": false,
+          "seller": "Walmart.com",
+          "store_location": "64133",
+          "url": "https://www.walmart.com/ip/Marketside-Fresh-Organic-Bananas-Bunch/51259338?classType=REGULAR&athbdg=L1102",
+          "image": "https://i5.walmartimages.com/seo/Marketside-Fresh-Organic-Bananas-Bunch_f17ef225-0999-4035-9ed1-7a06607333b4.7c3b33492f937bcc19fe3339d5230929.jpeg",
+          "sponsored": false,
+          "product_id": "51259338",
+          "match_score": 55
+        },
+        {
+          "product_name": "Melissa's Exotic Banana Sampler",
+          "price": 64.59,
+          "availability": "In stock",
+          "out_of_stock": false,
+          "seller": "Melissa's Produce",
+          "store_location": "64133",
+          "url": "https://www.walmart.com/ip/Exotic-Banana-Sampler/2327792521?classType=REGULAR",
+          "image": "https://i5.walmartimages.com/seo/Exotic-Banana-Sampler_b37f2b2e-f5cd-471e-bf88-1616f4830db7.62fefeae9b0162375a8c99b8d1d73676.jpeg",
+          "sponsored": false,
+          "product_id": "2327792521",
+          "match_score": 5
+        }
+      ],
+      "matches_found": 3,
+      "status": "candidate_found"
+    }
+  }
+}
