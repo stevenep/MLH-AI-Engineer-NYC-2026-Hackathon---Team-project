@@ -2,6 +2,8 @@ import os
 
 from flask import Flask, jsonify, request
 from groceries_data import find_grocery_stores
+from nimble_python import Nimble
+from aldi_prices_ana import find_aldi_prices
 
 app = Flask(__name__)
 
@@ -44,6 +46,59 @@ def groceries():
         app.logger.exception("Grocery lookup failed")
         return jsonify({"error": "Grocery lookup failed."}), 502
 
+@app.post("/api/grocery-plan")
+def grocery_plan():
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({"error": "Send a JSON object."}), 400
+
+    address = data.get("address")
+    items = data.get("items")
+
+    if not isinstance(address, str) or not address.strip():
+        return jsonify({"error": "Enter an address."}), 400
+
+    if (
+        not isinstance(items, list)
+        or not 1 <= len(items) <= 5
+        or any(
+            not isinstance(item, str) or not item.strip()
+            for item in items
+        )
+    ):
+        return jsonify({
+            "error": "Enter between 1 and 5 grocery items."
+        }), 400
+
+    api_key = os.environ.get("NIMBLE_API_KEY")
+
+    if not api_key:
+        return jsonify({"error": "Backend API key is missing."}), 500
+
+    try:
+        nearby_stores = find_grocery_stores(
+            address.strip(), api_key
+        )
+
+        nimble = Nimble(api_key=api_key)
+
+        aldi_items = find_aldi_prices(
+            nimble,
+            [item.strip() for item in items],
+        )
+
+        return jsonify({
+            "nearby_stores": nearby_stores,
+            "aldi_items": aldi_items,
+        })
+
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    except Exception:
+        app.logger.exception("Grocery plan failed")
+        return jsonify({"error": "Grocery lookup failed."}), 502
 
 if __name__ == "__main__":
     app.run(port=5000)
