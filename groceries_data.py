@@ -1,4 +1,3 @@
-from getpass import getpass
 import ssl
 import certifi
 
@@ -9,13 +8,7 @@ from geopy.distance import geodesic
 from urllib.parse import urlencode
 
 
-def main():
-    api_key = getpass("Enter your Nimble API key: ").strip()
-
-    if not api_key:
-        print("Please provide an API key.")
-        return
-
+def find_grocery_stores(start_address, api_key):
     nimble = Nimble(api_key=api_key)
 
     # GeoPy is a separate library for coordinates and distance.
@@ -35,19 +28,10 @@ def main():
     )
 
     # Ask for the starting address once.
-    start_address = input(
-        "Enter your address, including city and state: "
-    ).strip()
-
-    if not start_address:
-        print("Please enter an address.")
-        return
-
     location = geocode(start_address)
 
     if location is None:
-        print("Address lookup failed. Try a complete street address.")
-        return
+        raise ValueError("Could not locate the starting address.")
 
     origin = (location.latitude, location.longitude)
     print(f"\nSearching near: {location.address}")
@@ -80,11 +64,6 @@ def main():
     if not stores:
         print("No store records returned.")
         return
-
-    maps_url = "https://www.google.com/maps/search/?" + urlencode({
-    "api": 1,
-    "query": f"{store_name}, {store_address}",
-})
 
     nearby_stores = []
     seen_addresses = set()
@@ -136,6 +115,14 @@ def main():
 
         # Keep the strict 5-mile filter.
         if distance_miles <= 5:
+            maps_url = (
+            "https://www.google.com/maps/search/?"
+            + urlencode({
+                "api": 1,
+                "query": f"{store_name}, {store_address}",
+            })
+        )
+
             nearby_stores.append({
                 "name": store_name,
                 "address": store_address,
@@ -147,26 +134,4 @@ def main():
     nearby_stores.sort(key=lambda store: store["distance"])
     nearby_stores = nearby_stores[:15]
 
-    print(
-        f"\n=== Found {len(nearby_stores)} stores "
-        f"within 5 miles ==="
-    )
-
-    for number, store in enumerate(nearby_stores, start=1):
-        print(f"\n{number}. {store['name']}")
-        print(f"Address: {store['address']}")
-        print(f"Distance: {store['distance']:.2f} miles")
-        print(f"Source: {store['source']}")
-
-    if not nearby_stores:
-        print("No retrieved stores passed the distance check.")
-
-    if skipped:
-        print(
-            f"\nSkipped {skipped} results with missing details "
-            "or unsuccessful address lookups."
-        )
-
-
-if __name__ == "__main__":
-    main()
+    return nearby_stores
